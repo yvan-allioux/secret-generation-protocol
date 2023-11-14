@@ -1,84 +1,100 @@
 package main
 
 import (
-    "encoding/json"
+    "log"
     "net/http"
     "sync"
-	"math/rand"
-	"time"
+    "math/rand"
+    "time"
+    "github.com/gorilla/websocket"
 )
 
 type SecretSharing struct {
     sync.Mutex
     Secret []int
     ClientsReady int // Compteur pour les clients prêts
+    Clients []*websocket.Conn
 }
 
 var secretSharing SecretSharing
 
+var upgrader = websocket.Upgrader{
+    ReadBufferSize:  1024,
+    WriteBufferSize: 1024,
+    CheckOrigin: func(r *http.Request) bool { return true },
+}
+
 func main() {
-	// Initialisez le générateur de nombres aléatoires
     rand.Seed(time.Now().UnixNano())
 
-    http.HandleFunc("/nouvelle_valeur", NouvelleValeur)
-    http.HandleFunc("/obtenir_tableau", ObtenirTableau)
-    http.HandleFunc("/reset_tableau", ResetTableau)
-    http.HandleFunc("/client_pret", ClientPret)
+    http.HandleFunc("/ws", handleConnections)
 
-    http.ListenAndServe(":8080", nil)
+    go handleMessages()
+
+    log.Println("Serveur démarré sur :8080")
+    err := http.ListenAndServe(":8080", nil)
+    if err != nil {
+        log.Fatal("ListenAndServe: ", err)
+    }
 }
 
-func NouvelleValeur(w http.ResponseWriter, r *http.Request) {
-    var valeur int
-    // Parse la valeur depuis la requête
-    err := json.NewDecoder(r.Body).Decode(&valeur)
+func handleConnections(w http.ResponseWriter, r *http.Request) {
+    ws, err := upgrader.Upgrade(w, r, nil)
     if err != nil {
-        http.Error(w, err.Error(), http.StatusBadRequest)
-        return
+        log.Fatal(err)
     }
+    defer ws.Close()
 
-    // Ajoute la nouvelle valeur au tableau secret
     secretSharing.Lock()
-    secretSharing.Secret = append(secretSharing.Secret, valeur)
+    secretSharing.Clients = append(secretSharing.Clients, ws)
     secretSharing.Unlock()
 
-    w.WriteHeader(http.StatusCreated)
-}
-
-func ObtenirTableau(w http.ResponseWriter, r *http.Request) {
-    secretSharing.Lock()
-    defer secretSharing.Unlock()
-
-    // Renvoie le tableau secret en tant que réponse JSON
-    w.Header().Set("Content-Type", "application/json")
-    json.NewEncoder(w).Encode(secretSharing.Secret)
-}
-
-func ResetTableau(w http.ResponseWriter, r *http.Request) {
-    secretSharing.Lock()
-    defer secretSharing.Unlock()
-
-    // Réinitialise le tableau secret
-    secretSharing.Secret = nil
-
-    w.WriteHeader(http.StatusOK)
-}
-
-func ClientPret(w http.ResponseWriter, r *http.Request) {
-    secretSharing.Lock()
-    defer secretSharing.Unlock()
-
-    // Incrémente le compteur des clients prêts
-    secretSharing.ClientsReady++
-    if secretSharing.ClientsReady >= 2 {
-        // Si les deux clients sont prêts, réinitialise le compteur et effectue le traitement
-        secretSharing.ClientsReady = 0
-        // Renvoie l'instruction de traitement au client'
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(true)
+    for {
+        var msg map[string]int
+        err := ws.ReadJSON(&msg)
+        if err != nil {
+            log.Printf("error: %v", err)
+            break
+        }
+        handleClientMessage(ws, msg)
     }
-
-    w.WriteHeader(http.StatusOK)
 }
 
+func handleClientMessage(client *websocket.Conn, msg map[string]int) {
+    if valeur, ok := msg["nouvelle_valeur"]; ok {
+        secretSharing.Lock()
+        secretSharing.Secret = append(secretSharing.Secret, valeur)
+        secretSharing.Unlock()
+    } else if _, ok := msg["obtenir_tableau"]; ok {
+        secretSharing.Lock()
+        err := client.WriteJSON(secretSharing.Secret)
+        secretSharing.Unlock()
+        if err != nil {
+            log.Printf("error: %v", err)
+        }
+    } else if _, ok := msg["reset_tableau"]; ok {
+        secretSharing.Lock()
+        secretSharing.Secret = nil
+        secretSharing.Unlock()
+    } else if _, ok := msg["client_pret"]; ok {
+        secretSharing.Lock()
+        secretSharing.ClientsReady++
+        if secretSharing.ClientsReady >= 2 {
+            secretSharing.ClientsReady = 0
+            for _, c := range secretSharing.Clients {
+                err := c.WriteJSON(true)
+                if err != nil {
+                    log.Printf("error: %v", err)
+                }
+            }
+        }
+        secretSharing.Unlock()
+    }
+}
 
+func handleMessages() {
+    for {
+        // Ici, vous pouvez ajouter une logique pour gérer des messages globaux ou des événements
+        // par exemple, envoyer des mises à jour périodiques à tous les clients connectés.
+    }
+}

@@ -19,3 +19,5 @@ CMD ["go", "run", "main.go"]
 
 #docker build -t secret_generation_protocol-client -f Dockerfile.client .
 #docker run -p 8090:8090 secret_generation_protocol-client
+
+#docker build -t secret_generation_protocol-client -f Dockerfile.client . && docker run -p 8090:8090 secret_generation_protocol-client

@@ -1,89 +1,68 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>API Interaction</title>
+    <title>Interaction WebSocket</title>
 </head>
 <body>
-    <h1>API Interaction</h1>
+    <h1>Interaction WebSocket</h1>
 
     <h2>Client</h2>
-    <button id="startButton">Démarrer</button>
+    <button id="startButton" disabled>Démarrer</button>
     <div id="status"></div>
     
     <h2>Obtenir le tableau</h2>
-    <button id="getArrayButton">Obtenir</button>
+    <button id="getArrayButton" disabled>Obtenir</button>
     <div id="arrayResult"></div>
     
     <h2>Réinitialiser le tableau</h2>
-    <button id="resetArrayButton">Réinitialiser</button>
+    <button id="resetArrayButton" disabled>Réinitialiser</button>
     
     <script>
+        const ws = new WebSocket("ws://localhost:8080/ws");
         const startButton = document.getElementById("startButton");
         const status = document.getElementById("status");
         const getArrayButton = document.getElementById("getArrayButton");
         const arrayResult = document.getElementById("arrayResult");
         const resetArrayButton = document.getElementById("resetArrayButton");
 
-        let clientReady = false;
-        let otherClientReady = false;
+        ws.onopen = function(event) {
+            console.log("Connexion WebSocket établie.");
+            startButton.disabled = false;
+            getArrayButton.disabled = false;
+            resetArrayButton.disabled = false;
+        };
 
-        startButton.addEventListener("click", async () => {
-            if (!clientReady) {
-                const response = await fetch("/client_pret", {
-                    method: "POST",
-                });
-                if (response.status === 200) {
-                    clientReady = true;
-                    status.textContent = "Prêt";
-                    checkBothClientsReady();
-                } else {
-                    alert("Une erreur s'est produite.");
-                }
-            } else {
-                alert("Vous êtes déjà prêt.");
-            }
-        });
-
-        getArrayButton.addEventListener("click", async () => {
-            const response = await fetch("/obtenir_tableau");
-            if (response.status === 200) {
-                const data = await response.json();
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (typeof data === 'boolean') {
+                status.textContent = "Les deux clients sont prêts.";
+            } else if (Array.isArray(data)) {
                 arrayResult.textContent = JSON.stringify(data);
-            } else {
-                alert("Une erreur s'est produite.");
             }
+        };
+
+        startButton.addEventListener("click", () => {
+            ws.send(JSON.stringify({ client_pret: true }));
         });
 
-        resetArrayButton.addEventListener("click", async () => {
-            const response = await fetch("/reset_tableau", {
-                method: "POST",
-            });
-            if (response.status === 200) {
-                alert("Tableau réinitialisé avec succès.");
-            } else {
-                alert("Une erreur s'est produite.");
-            }
+        getArrayButton.addEventListener("click", () => {
+            ws.send(JSON.stringify({ obtenir_tableau: true }));
         });
 
-        async function checkBothClientsReady() {
-            if (clientReady && otherClientReady) {
-                for (let i = 0; i < 10; i++) {
-                    const response = await fetch("/nouvelle_valeur", {
-                        method: "POST",
-                        headers: {
-                            "Content-Type": "application/json",
-                        },
-                        body: JSON.stringify(Math.floor(Math.random() * 2)),
-                    });
-                    if (response.status === 201) {
-                        console.log(`Requête ${i + 1} envoyée avec succès.`);
-                    } else {
-                        alert("Une erreur s'est produite lors de l'envoi des requêtes.");
-                        break;
-                    }
-                }
-            }
-        }
+        resetArrayButton.addEventListener("click", () => {
+            ws.send(JSON.stringify({ reset_tableau: true }));
+        });
+
+        ws.onerror = function(error) {
+            console.log(`Erreur WebSocket : ${error.message}`);
+        };
+
+        ws.onclose = function(event) {
+            console.log("Connexion WebSocket fermée.");
+            startButton.disabled = true;
+            getArrayButton.disabled = true;
+            resetArrayButton.disabled = true;
+        };
     </script>
 </body>
 </html>
