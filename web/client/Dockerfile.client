@@ -1,0 +1,21 @@
+# Start from a lightweight version of Golang base image
+FROM golang:1.18-alpine
+
+# Set the Current Working Directory inside the container
+WORKDIR /app
+
+# Copy the source from the current directory to the Working Directory inside the container
+COPY . .
+
+# Build the Go app
+#RUN go build -o webserver .
+
+# This container exposes port 8090 to the outside world
+EXPOSE 8090
+
+# Run the executable
+CMD ["go", "run", "main.go"]
+#CMD ["./webserver"]
+
+#docker build -t secret_generation_protocol-client -f Dockerfile.client .
+#docker run -p 8090:8090 secret_generation_protocol-client

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>API Interaction</title>
+</head>
+<body>
+    <h1>API Interaction</h1>
+
+    <h2>Client</h2>
+    <button id="startButton">Démarrer</button>
+    <div id="status"></div>
+    
+    <h2>Obtenir le tableau</h2>
+    <button id="getArrayButton">Obtenir</button>
+    <div id="arrayResult"></div>
+    
+    <h2>Réinitialiser le tableau</h2>
+    <button id="resetArrayButton">Réinitialiser</button>
+    
+    <script>
+        const startButton = document.getElementById("startButton");
+        const status = document.getElementById("status");
+        const getArrayButton = document.getElementById("getArrayButton");
+        const arrayResult = document.getElementById("arrayResult");
+        const resetArrayButton = document.getElementById("resetArrayButton");
+
+        let clientReady = false;
+        let otherClientReady = false;
+
+        startButton.addEventListener("click", async () => {
+            if (!clientReady) {
+                const response = await fetch("/client_pret", {
+                    method: "POST",
+                });
+                if (response.status === 200) {
+                    clientReady = true;
+                    status.textContent = "Prêt";
+                    checkBothClientsReady();
+                } else {
+                    alert("Une erreur s'est produite.");
+                }
+            } else {
+                alert("Vous êtes déjà prêt.");
+            }
+        });
+
+        getArrayButton.addEventListener("click", async () => {
+            const response = await fetch("/obtenir_tableau");
+            if (response.status === 200) {
+                const data = await response.json();
+                arrayResult.textContent = JSON.stringify(data);
+            } else {
+                alert("Une erreur s'est produite.");
+            }
+        });
+
+        resetArrayButton.addEventListener("click", async () => {
+            const response = await fetch("/reset_tableau", {
+                method: "POST",
+            });
+            if (response.status === 200) {
+                alert("Tableau réinitialisé avec succès.");
+            } else {
+                alert("Une erreur s'est produite.");
+            }
+        });
+
+        async function checkBothClientsReady() {
+            if (clientReady && otherClientReady) {
+                for (let i = 0; i < 10; i++) {
+                    const response = await fetch("/nouvelle_valeur", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify(Math.floor(Math.random() * 2)),
+                    });
+                    if (response.status === 201) {
+                        console.log(`Requête ${i + 1} envoyée avec succès.`);
+                    } else {
+                        alert("Une erreur s'est produite lors de l'envoi des requêtes.");
+                        break;
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>

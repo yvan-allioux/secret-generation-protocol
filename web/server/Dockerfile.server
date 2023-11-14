@@ -1,0 +1,33 @@
+# Utiliser l'image officielle de Go
+FROM golang:1.17
+
+# Définir un répertoire de travail
+WORKDIR /app
+
+# Copier le fichier Go local (supposons qu'il s'appelle 'main.go') dans le conteneur
+COPY . .
+
+#port
+EXPOSE 8080
+
+# Commande à exécuter lorsque le conteneur démarre
+CMD ["go", "run", "main.go"]
+
+# Construire l'image Docker
+#docker build -t secret_generation_protocol-server -f Dockerfile.server .
+
+# Exécuter l'application Go dans un conteneur Docker
+#docker run secret_generation_protocol-server
+#docker run -p 8080:8080 secret_generation_protocol-server
+
+
+#docker build -t secret_generation_protocol-server . && docker run -p 8080:8080 secret_generation_protocol-server
+#docker build -t secret_generation_protocol-server . && docker run -it -p 8080:8080 secret_generation_protocol-server
+
+#docker build -t secret_generation_protocol-server -f Dockerfile.prod .
+#docker save -o secret_generation_protocol-server.tar secret_generation_protocol-server
+#scp secret_generation_protocol-server.tar debian@141.94.206.18:/home/debian
+#docker load -i secret_generation_protocol-server.tar
+#docker run -p 8080:80
+#docker run --restart=always -p 8080:80
+
