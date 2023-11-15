@@ -1,5 +1,5 @@
 # Utiliser l'image officielle de Go pour la construction
-FROM golang:1.17 AS builder
+FROM golang:latest AS builder
 
 # Définir un répertoire de travail
 WORKDIR /app
@@ -31,6 +31,6 @@ CMD ["./server"]
 #docker build -t secret_generation_protocol-server -f Dockerfile.server .
 
 # Exécuter l'application Go dans un conteneur Docker
-#docker run secret_generation_protocol-server
+#docker run -p 8080:8080 secret_generation_protocol-server
 
-#docker build -t secret_generation_protocol-server -f Dockerfile.server . && docker run secret_generation_protocol-server
+#docker build -t secret_generation_protocol-server -f Dockerfile.server . && docker run  -p 8080:8080 secret_generation_protocol-server

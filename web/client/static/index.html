@@ -7,58 +7,76 @@
     <h1>Interaction WebSocket</h1>
 
     <h2>Client</h2>
+    <!-- Bouton pour démarrer l'interaction avec le WebSocket -->
     <button id="startButton" disabled>Démarrer</button>
     <div id="status"></div>
     
     <h2>Obtenir le tableau</h2>
+    <!-- Bouton pour obtenir les données du tableau depuis le serveur -->
     <button id="getArrayButton" disabled>Obtenir</button>
     <div id="arrayResult"></div>
     
     <h2>Réinitialiser le tableau</h2>
+    <!-- Bouton pour réinitialiser le tableau sur le serveur -->
     <button id="resetArrayButton" disabled>Réinitialiser</button>
     
     <script>
+        // Création d'une nouvelle connexion WebSocket.
         const ws = new WebSocket("ws://localhost:8080/ws");
+        // Récupération des éléments du DOM.
         const startButton = document.getElementById("startButton");
         const status = document.getElementById("status");
         const getArrayButton = document.getElementById("getArrayButton");
         const arrayResult = document.getElementById("arrayResult");
         const resetArrayButton = document.getElementById("resetArrayButton");
 
+        // Événement déclenché lorsque la connexion WebSocket est ouverte.
         ws.onopen = function(event) {
             console.log("Connexion WebSocket établie.");
+            // Active les boutons une fois la connexion établie.
             startButton.disabled = false;
             getArrayButton.disabled = false;
             resetArrayButton.disabled = false;
         };
 
+        // Événement pour gérer les messages reçus via WebSocket.
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
+            console.log(data);
             if (typeof data === 'boolean') {
+                // Affiche le statut lorsque deux clients sont prêts.
                 status.textContent = "Les deux clients sont prêts.";
+                
             } else if (Array.isArray(data)) {
+                // Affiche le tableau reçu du serveur.
                 arrayResult.textContent = JSON.stringify(data);
             }
         };
 
+        // Envoi d'un message au serveur lorsque le bouton est cliqué.
         startButton.addEventListener("click", () => {
             ws.send(JSON.stringify({ client_pret: true }));
         });
 
+        // Demande les données du tableau au serveur.
         getArrayButton.addEventListener("click", () => {
             ws.send(JSON.stringify({ obtenir_tableau: true }));
         });
 
+        // Envoie une requête pour réinitialiser le tableau sur le serveur.
         resetArrayButton.addEventListener("click", () => {
             ws.send(JSON.stringify({ reset_tableau: true }));
         });
 
+        // Gère les erreurs de la connexion WebSocket.
         ws.onerror = function(error) {
             console.log(`Erreur WebSocket : ${error.message}`);
         };
 
+        // Événement déclenché lorsque la connexion WebSocket est fermée.
         ws.onclose = function(event) {
             console.log("Connexion WebSocket fermée.");
+            // Désactive les boutons lorsque la connexion est fermée.
             startButton.disabled = true;
             getArrayButton.disabled = true;
             resetArrayButton.disabled = true;
