@@ -4,22 +4,33 @@ import (
     "log"
     "net/http"
     "sync"
-    "math/rand"
     "time"
     "github.com/gorilla/websocket"
 )
 
-// SecretSharing struct stocke les informations sur le partage de secret entre les clients.
-type SecretSharing struct {
-    sync.Mutex         // Mutex pour gérer l'accès concurrent aux données.
-    Secret []int       // Tableau pour stocker les valeurs secrètes partagées.
-    ClientsReady int   // Compteur pour les clients prêts.
-    Clients []*websocket.Conn // Liste des connexions client WebSocket.
+// SecretItem représente un élément du secret avec sa valeur et le timestamp de sa réception.
+type SecretItem struct {
+    Value     int       // La valeur du secret.
+    Timestamp time.Time // Le moment de la réception de la valeur.
 }
 
-var secretSharing SecretSharing // Instance globale de SecretSharing.
+// SecretSharing struct modifiée pour stocker des éléments de SecretItem.
+type SecretSharing struct {
+    sync.Mutex
+    Secret []SecretItem               // Tableau pour stocker les secrets avec timestamps.
+    ClientsReady int                  // Compteur pour les clients prêts.
+    Clients []*websocket.Conn         // Tableau des connexions clients.
+    ClientIDs map[*websocket.Conn]int // Stocke les identifiants des clients.
+    NextClientID int                  // Génère le prochain identifiant.
+}
 
-// Configuration pour l'amélioration des connexions HTTP vers WebSocket.
+// Instance globale de SecretSharing.
+var secretSharing = SecretSharing{
+    ClientIDs: make(map[*websocket.Conn]int),
+    NextClientID: 0,
+}
+
+// Configuration pour l'upgrade de HTTP vers WebSocket.
 var upgrader = websocket.Upgrader{
     ReadBufferSize:  1024,
     WriteBufferSize: 1024,
@@ -27,72 +38,90 @@ var upgrader = websocket.Upgrader{
 }
 
 func main() {
-    rand.Seed(time.Now().UnixNano()) // Initialise le générateur de nombres aléatoires.
+    // Définit la route et le handler pour les connexions WebSocket.
+    http.HandleFunc("/ws", handleConnections)
 
-    http.HandleFunc("/ws", handleConnections) // Gère les connexions WebSocket.
+    // Lance une goroutine pour gérer les messages.
+    go handleMessages()
 
-    go handleMessages() // Lance une goroutine pour gérer les messages.
-
+    // Démarre le serveur sur le port 8080.
     log.Println("Serveur démarré sur :8080")
-    err := http.ListenAndServe(":8080", nil) // Démarre le serveur HTTP sur le port 8080.
+    err := http.ListenAndServe(":8080", nil)
     if err != nil {
-        log.Fatal("ListenAndServe: ", err) 
+        log.Fatal("ListenAndServe: ", err)
     }
 }
 
 // Gère les nouvelles connexions WebSocket.
 func handleConnections(w http.ResponseWriter, r *http.Request) {
-    ws, err := upgrader.Upgrade(w, r, nil) // Améliore la connexion HTTP en WebSocket.
+    // Upgrade la requête HTTP vers une connexion WebSocket.
+    ws, err := upgrader.Upgrade(w, r, nil)
     if err != nil {
-        log.Fatal("47", err)
+        log.Fatal("Erreur d'upgrade WebSocket", err)
     }
-    defer ws.Close() // Assure que la connexion WebSocket est fermée à la fin.
+    defer ws.Close()
 
+    // Enregistre le nouveau client.
     secretSharing.Lock()
-    secretSharing.Clients = append(secretSharing.Clients, ws) // Ajoute le client WebSocket à la liste.
+    secretSharing.NextClientID++
+    clientID := secretSharing.NextClientID
+    secretSharing.ClientIDs[ws] = clientID
+    secretSharing.Clients = append(secretSharing.Clients, ws)
     secretSharing.Unlock()
 
+    // Boucle pour lire les messages du client.
     for {
-        var msg map[string]interface{} // Modification ici
+        var msg map[string]interface{}
         err := ws.ReadJSON(&msg)
         if err != nil {
-            log.Printf("error 59 : %v", err)
+            log.Printf("Erreur de lecture JSON : %v", err)
             break
         }
         handleClientMessage(ws, msg)
-    }    
+    }
 }
 
-// Gère les messages des clients WebSocket.
+// Traite les messages reçus d'un client.
 func handleClientMessage(client *websocket.Conn, msg map[string]interface{}) {
-    // Traite différents types de messages.
+    // Ajoute une nouvelle valeur au secret partagé.
     if valeur, ok := msg["nouvelle_valeur"]; ok {
-        if val, ok := valeur.(int); ok {
-            secretSharing.Lock()
-            secretSharing.Secret = append(secretSharing.Secret, val)
-            secretSharing.Unlock()
+        secretSharing.Lock()
+        // Création de l'élément SecretItem avec la valeur et le timestamp actuel.
+        newItem := SecretItem{
+            Value:     int(valeur.(float64)),
+            Timestamp: time.Now(),
         }
+        secretSharing.Secret = append(secretSharing.Secret, newItem)
+        secretSharing.Unlock()  
     } else if _, ok := msg["obtenir_tableau"]; ok {
+        // Envoie le tableau actuel de secrets au client.
         secretSharing.Lock()
         err := client.WriteJSON(secretSharing.Secret)
         secretSharing.Unlock()
         if err != nil {
-            log.Printf("error 78 : %v", err)
+            log.Printf("Erreur d'envoi JSON : %v", err)
         }
     } else if _, ok := msg["reset_tableau"]; ok {
+        // Réinitialise le tableau de secrets.
         secretSharing.Lock()
         secretSharing.Secret = nil
         secretSharing.Unlock()
     } else if _, ok := msg["client_pret"]; ok {
-        print("client_pret")
+        // Gère l'état 'prêt' des clients.
         secretSharing.Lock()
         secretSharing.ClientsReady++
         if secretSharing.ClientsReady >= 2 {
             secretSharing.ClientsReady = 0
             for _, c := range secretSharing.Clients {
-                err := c.WriteJSON(true)
+                clientID, exists := secretSharing.ClientIDs[c]
+                if !exists {
+                    log.Printf("ID client introuvable pour une connexion")
+                    continue
+                }
+                // Envoie l'identifiant unique à chaque client.
+                err := c.WriteJSON(map[string]int{"client_id": clientID})
                 if err != nil {
-                    log.Printf("error 93 : %v", err)
+                    log.Printf("Erreur d'envoi JSON : %v", err)
                 }
             }
         }
@@ -100,10 +129,7 @@ func handleClientMessage(client *websocket.Conn, msg map[string]interface{}) {
     }
 }
 
-
+// Gère les messages globaux ou les événements.
 func handleMessages() {
-    for {
-        // Ici, vous pouvez ajouter une logique pour gérer des messages globaux ou des événements,
-        // par exemple, envoyer des mises à jour périodiques à tous les clients connectés.
-    }
+    // Logique pour gérer les messages globaux ou les événements.
 }

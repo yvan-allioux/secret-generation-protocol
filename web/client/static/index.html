@@ -43,10 +43,12 @@
         ws.onmessage = function(event) {
             const data = JSON.parse(event.data);
             console.log(data);
-            if (typeof data === 'boolean') {
+            if (data.client_go = true) {
                 // Affiche le statut lorsque deux clients sont prêts.
                 status.textContent = "Les deux clients sont prêts.";
-                
+                console.log("GO !");
+                ws.send(JSON.stringify({ nouvelle_valeur: data.client_id}));
+                ws.send(JSON.stringify({ nouvelle_valeur: data.client_id}));
             } else if (Array.isArray(data)) {
                 // Affiche le tableau reçu du serveur.
                 arrayResult.textContent = JSON.stringify(data);
