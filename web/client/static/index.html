@@ -1,8 +1,10 @@
 <!DOCTYPE html>
 <html>
+
 <head>
     <title>Interaction WebSocket</title>
 </head>
+
 <body>
     <h1>Interaction WebSocket</h1>
 
@@ -10,17 +12,23 @@
     <!-- Bouton pour démarrer l'interaction avec le WebSocket -->
     <button id="startButton" disabled>Démarrer</button>
     <div id="status"></div>
-    
+
     <h2>Obtenir le tableau</h2>
     <!-- Bouton pour obtenir les données du tableau depuis le serveur -->
     <button id="getArrayButton" disabled>Obtenir</button>
     <div id="arrayResult"></div>
-    
+
     <h2>Réinitialiser le tableau</h2>
     <!-- Bouton pour réinitialiser le tableau sur le serveur -->
     <button id="resetArrayButton" disabled>Réinitialiser</button>
-    
+    <h2>Modifier la Tolérance (ms)</h2>
+    <input value="10" type="number" id="toleranceInput" min="0" placeholder="Tolérance en ms" required>
+
+
     <script>
+        let clientData = []; // Variable globale pour stocker les données
+        let serverData = []; // Variable globale pour stocker les données
+
         // Création d'une nouvelle connexion WebSocket.
         const ws = new WebSocket("ws://localhost:8080/ws");
         // Récupération des éléments du DOM.
@@ -29,9 +37,12 @@
         const getArrayButton = document.getElementById("getArrayButton");
         const arrayResult = document.getElementById("arrayResult");
         const resetArrayButton = document.getElementById("resetArrayButton");
+        // Élément du formulaire et du champ de saisie
+        const toleranceForm = document.getElementById("toleranceForm");
+        const toleranceInput = document.getElementById("toleranceInput");
 
         // Événement déclenché lorsque la connexion WebSocket est ouverte.
-        ws.onopen = function(event) {
+        ws.onopen = function (event) {
             console.log("Connexion WebSocket établie.");
             // Active les boutons une fois la connexion établie.
             startButton.disabled = false;
@@ -40,18 +51,73 @@
         };
 
         // Événement pour gérer les messages reçus via WebSocket.
-        ws.onmessage = function(event) {
+        ws.onmessage = function (event) {
             const data = JSON.parse(event.data);
-            console.log(data);
-            if (data.client_go = true) {
+            // Affiche le message reçu dans la console.
+            //console.log("Message reçu :", data);
+            if (data.client_id > 0) {
+                console.log('data.client_id: ', data.client_id);
                 // Affiche le statut lorsque deux clients sont prêts.
                 status.textContent = "Les deux clients sont prêts.";
                 console.log("GO !");
-                ws.send(JSON.stringify({ nouvelle_valeur: data.client_id}));
-                ws.send(JSON.stringify({ nouvelle_valeur: data.client_id}));
+                // Commence l'envoi séquentiel des données
+                sendSequentially(ws, data.client_id);
             } else if (Array.isArray(data)) {
                 // Affiche le tableau reçu du serveur.
-                arrayResult.textContent = JSON.stringify(data);
+                console.log("Tableau reçu du serveur.");
+                console.log(data);
+                //enregistre le tableau dans la variable globale
+                serverData = data;
+                //affiche le tableau stocké dans la variable globale
+                console.log("Tableau stocké dans la variable globale client");
+                console.log(clientData);
+                //affiche le résultat de la comparaison
+                console.log("Résultat de la comparaison :");
+                let tableauCompare = findMatchingRequests(serverData, clientData);
+                console.log(tableauCompare);
+                //verifie si le tableau fait 10 éléments
+                let varDeTestCounttableauCompare = 0;
+                tableauCompare.forEach(element => {
+                    if (element.matchFound == true) {
+                        varDeTestCounttableauCompare++;
+                    }
+                });
+                //si le tableau ne fait pas 10 éléments avec une valeur de comparaison a true
+                if (varDeTestCounttableauCompare != 10) {
+                    console.log("Le tableau ne fait pas 10 éléments avec une valeur de comparaison a true");
+                } else {
+                    console.log("comparaison validée");
+                    // Mixe le tableau tableauCompare avec le tableau serverData
+                    let tableauFinal = serverData.map(serverRecord => {
+                        // Trouve la correspondance dans tableauCompare
+                        let match = tableauCompare.find(clientRecord => clientRecord.serverTimestamp === serverRecord.Timestamp);
+                        if (match) {
+                            // Si une correspondance est trouvée, fusionne les enregistrements
+                            return {...serverRecord, matchFound: true, client_id: match.client_id};
+                        } else {
+                            // Si aucune correspondance, retourne l'enregistrement serveur tel quel
+                            return {...serverRecord, matchFound: false};
+                        }
+                    });
+                    console.log(tableauFinal);
+                    let secretFinal = "";
+                    tableauFinal.forEach(element => {
+                        if (element.matchFound == true) { //TODO
+                            if (element.client_id == data.client_id) {
+                                secretFinal = secretFinal + "0";
+                            } else {
+                                secretFinal = secretFinal + "1";
+                            }
+                        } else {
+                            if (element.client_id == data.client_id) {
+                                secretFinal = secretFinal + "1";
+                            } else {
+                                secretFinal = secretFinal + "0";
+                            }
+                        }
+                    });
+                    console.log("secretFinal: ", secretFinal);
+                }
             }
         };
 
@@ -71,18 +137,79 @@
         });
 
         // Gère les erreurs de la connexion WebSocket.
-        ws.onerror = function(error) {
+        ws.onerror = function (error) {
             console.log(`Erreur WebSocket : ${error.message}`);
         };
 
         // Événement déclenché lorsque la connexion WebSocket est fermée.
-        ws.onclose = function(event) {
+        ws.onclose = function (event) {
             console.log("Connexion WebSocket fermée.");
             // Désactive les boutons lorsque la connexion est fermée.
             startButton.disabled = true;
             getArrayButton.disabled = true;
             resetArrayButton.disabled = true;
         };
+
+        // Fonction qui retourne une Promise résolue après un délai spécifié
+        function delay(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        // Fonction asynchrone pour envoyer des données de manière séquentielle
+        async function sendSequentially(ws, clientId) {
+            clientData = []
+            serverData = []
+            for (let i = 0; i < 10; i++) {
+                // Génère un délai aléatoire entre 0 et 5 secondes
+                let delayTime = Math.random() * 5000;
+
+                // Attend le délai spécifié
+                await delay(delayTime);
+
+                // Capture le Timestamp actuel
+                let currentTimestamp = new Date().toISOString();
+
+                // Envoie les données
+                ws.send(JSON.stringify({ nouvelle_valeur: clientId }));
+
+                // Stocke les données dans la variable globale
+                clientData.push({ client_id: clientId, Timestamp: currentTimestamp });
+
+                // Affiche un message dans la console
+                console.log("Données envoyées : " + clientId + " à " + currentTimestamp);
+            }
+            console.log("OK !");
+        }
+
+        function findMatchingRequests(serverData, clientData) {
+            const TOLERANCE_MS = parseInt(document.getElementById("toleranceInput").value, 10) || 10; // Valeur par défaut de 10 ms
+            let results = []; // Tableau pour stocker les résultats
+
+            clientData.forEach(clientRecord => {
+                let matchFound = false;
+                const clientTimestamp = new Date(clientRecord.Timestamp);
+
+                serverData.forEach(serverRecord => {
+                    const serverTimestamp = new Date(serverRecord.Timestamp);
+                    const timeDifference = Math.abs(clientTimestamp - serverTimestamp);
+
+                    if (timeDifference <= TOLERANCE_MS) {
+                        matchFound = true;
+                        results.push({
+                            matchFound: true,
+                            client_id: clientRecord.client_id,
+                            clientTimestamp: clientRecord.Timestamp,
+                            serverTimestamp: serverRecord.Timestamp
+                        });
+                    }
+                });
+
+            });
+            return results;
+        }
+
+
     </script>
 </body>
+
 </html>
