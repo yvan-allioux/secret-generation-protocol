@@ -22,12 +22,14 @@ type SecretSharing struct {
     Clients []*websocket.Conn         // Tableau des connexions clients.
     ClientIDs map[*websocket.Conn]int // Stocke les identifiants des clients.
     NextClientID int                  // Génère le prochain identifiant.
+    ClientDone map[int]bool           // Stocke les clients qui ont terminé.
 }
 
 // Instance globale de SecretSharing.
 var secretSharing = SecretSharing{
     ClientIDs: make(map[*websocket.Conn]int),
     NextClientID: 0,
+    ClientDone: make(map[int]bool), // Initialisation de la map.
 }
 
 // Configuration pour l'upgrade de HTTP vers WebSocket.
@@ -81,6 +83,20 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
     }
 }
 
+func sendConfirmationToAll() {
+    println("Tous les clients ont terminé d'envoyer des requêtes.")
+    secretSharing.Lock()
+    
+
+    for _, client := range secretSharing.Clients {
+        err := client.WriteJSON(map[string]string{"confirmation": "Tous les clients ont terminé d'envoyer des requêtes."})
+        if err != nil {
+            log.Printf("Erreur lors de l'envoi de la confirmation : %v", err)
+        }
+    }
+    defer secretSharing.Unlock()
+}
+
 // Traite les messages reçus d'un client.
 func handleClientMessage(client *websocket.Conn, msg map[string]interface{}) {
     // Ajoute une nouvelle valeur au secret partagé.
@@ -105,6 +121,23 @@ func handleClientMessage(client *websocket.Conn, msg map[string]interface{}) {
         // Réinitialise le tableau de secrets.
         secretSharing.Lock()
         secretSharing.Secret = nil
+        secretSharing.Unlock()
+    } else if _, ok := msg["client_a_terminer_denvoyer"]; ok {
+        secretSharing.Lock()
+        clientID := secretSharing.ClientIDs[client]
+        secretSharing.ClientDone[clientID] = true
+
+        // Vérifie si tous les clients ont terminé d'envoyer des requêtes.
+        allDone := true
+        for _, done := range secretSharing.ClientDone {
+            if !done {
+                allDone = false
+                break
+            }
+        }
+        if allDone && len(secretSharing.ClientDone) >= 2 {
+            sendConfirmationToAll()
+        }
         secretSharing.Unlock()
     } else if _, ok := msg["client_pret"]; ok {
         // Gère l'état 'prêt' des clients.

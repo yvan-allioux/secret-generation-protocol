@@ -7,6 +7,7 @@
 
 <body>
     <h1>Interaction WebSocket</h1>
+    <h2>secret : <div id="secret"></div></h2>
 
     <h2>Client</h2>
     <!-- Bouton pour démarrer l'interaction avec le WebSocket -->
@@ -26,6 +27,7 @@
 
 
     <script>
+        const nbDeRequete = 10;
         let clientData = []; // Variable globale pour stocker les données
         let serverData = []; // Variable globale pour stocker les données
 
@@ -34,6 +36,7 @@
         // Récupération des éléments du DOM.
         const startButton = document.getElementById("startButton");
         const status = document.getElementById("status");
+        const secret = document.getElementById("secret");
         const getArrayButton = document.getElementById("getArrayButton");
         const arrayResult = document.getElementById("arrayResult");
         const resetArrayButton = document.getElementById("resetArrayButton");
@@ -48,13 +51,15 @@
             startButton.disabled = false;
             getArrayButton.disabled = false;
             resetArrayButton.disabled = false;
+            // Envoie une requête pour réinitialiser le tableau sur le serveur.
+            ws.send(JSON.stringify({ reset_tableau: true }));
         };
 
         // Événement pour gérer les messages reçus via WebSocket.
         ws.onmessage = function (event) {
             const data = JSON.parse(event.data);
             // Affiche le message reçu dans la console.
-            //console.log("Message reçu :", data);
+            console.log("Message reçu :", data);
             if (data.client_id > 0) {
                 console.log('data.client_id: ', data.client_id);
                 // Affiche le statut lorsque deux clients sont prêts.
@@ -62,6 +67,13 @@
                 console.log("GO !");
                 // Commence l'envoi séquentiel des données
                 sendSequentially(ws, data.client_id);
+            
+            //si on resoit la valeur tout les client près
+            } else if (data.confirmation) {
+                console.log(data.confirmation); // Affiche le message dans la console
+                status.textContent = data.confirmation; // Affiche le message dans l'élément 'status' de l'interface utilisateur
+                // Envoie une requête pour obtenir les données du tableau depuis le serveur.
+                ws.send(JSON.stringify({ obtenir_tableau: true }));
             } else if (Array.isArray(data)) {
                 // Affiche le tableau reçu du serveur.
                 console.log("Tableau reçu du serveur.");
@@ -75,16 +87,16 @@
                 console.log("Résultat de la comparaison :");
                 let tableauCompare = findMatchingRequests(serverData, clientData);
                 console.log(tableauCompare);
-                //verifie si le tableau fait 10 éléments
+                //verifie si le tableau fait nbDeRequete éléments
                 let varDeTestCounttableauCompare = 0;
                 tableauCompare.forEach(element => {
                     if (element.matchFound == true) {
                         varDeTestCounttableauCompare++;
                     }
                 });
-                //si le tableau ne fait pas 10 éléments avec une valeur de comparaison a true
-                if (varDeTestCounttableauCompare != 10) {
-                    console.log("Le tableau ne fait pas 10 éléments avec une valeur de comparaison a true");
+                //si le tableau ne fait pas nbDeRequete éléments avec une valeur de comparaison a true
+                if (varDeTestCounttableauCompare != nbDeRequete) {
+                    console.log("Le tableau ne fait pas nbDeRequete éléments avec une valeur de comparaison a true");
                 } else {
                     console.log("comparaison validée");
                     // Mixe le tableau tableauCompare avec le tableau serverData
@@ -93,30 +105,38 @@
                         let match = tableauCompare.find(clientRecord => clientRecord.serverTimestamp === serverRecord.Timestamp);
                         if (match) {
                             // Si une correspondance est trouvée, fusionne les enregistrements
-                            return {...serverRecord, matchFound: true, client_id: match.client_id};
+                            return {...serverRecord, matchFound: true};
                         } else {
                             // Si aucune correspondance, retourne l'enregistrement serveur tel quel
                             return {...serverRecord, matchFound: false};
                         }
                     });
                     console.log(tableauFinal);
+                    //si le premier élément du tableau est true
+                    let inversion = false;
+                    if (tableauFinal[0].matchFound === true) {
+                        console.log("Le premier élément du tableau est true");
+                        //inversion de l'ordre du tableau
+                        inversion = true;
+
+                    } else {
+                        console.log("Le premier élément du tableau est false");
+                        inversion = false;
+                    }
                     let secretFinal = "";
                     tableauFinal.forEach(element => {
-                        if (element.matchFound == true) { //TODO
-                            if (element.client_id == data.client_id) {
-                                secretFinal = secretFinal + "0";
+                        if (element.matchFound === inversion) {
+                            if (element.client_id === data.client_id) {
+                                secretFinal += "1"; // Requête envoyée par vous
                             } else {
-                                secretFinal = secretFinal + "1";
+                                secretFinal += "0"; // Requête envoyée par quelqu'un d'autre
                             }
                         } else {
-                            if (element.client_id == data.client_id) {
-                                secretFinal = secretFinal + "1";
-                            } else {
-                                secretFinal = secretFinal + "0";
-                            }
+                            secretFinal += "0"; // Pas une requête matchée (donc pas la vôtre)
                         }
                     });
                     console.log("secretFinal: ", secretFinal);
+                    secret.textContent = secretFinal;
                 }
             }
         };
@@ -159,9 +179,9 @@
         async function sendSequentially(ws, clientId) {
             clientData = []
             serverData = []
-            for (let i = 0; i < 10; i++) {
-                // Génère un délai aléatoire entre 0 et 5 secondes
-                let delayTime = Math.random() * 5000;
+            for (let i = 0; i < nbDeRequete; i++) {
+                // Génère un délai aléatoire entre 0 et 2500 ms
+                let delayTime = Math.random() * 2500;
 
                 // Attend le délai spécifié
                 await delay(delayTime);
@@ -179,6 +199,11 @@
                 console.log("Données envoyées : " + clientId + " à " + currentTimestamp);
             }
             console.log("OK !");
+            //envoie une requête pour dire que le client a fini d'envoyer les données
+            ws.send(JSON.stringify({ client_a_terminer_denvoyer: clientId }));
+            // Demande les données du tableau au serveur.
+            //await delay(10000);
+            //ws.send(JSON.stringify({ obtenir_tableau: true }));
         }
 
         function findMatchingRequests(serverData, clientData) {
