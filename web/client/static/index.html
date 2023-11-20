@@ -3,31 +3,60 @@
 
 <head>
     <title>Interaction WebSocket</title>
+    <!-- Ajout du lien CDN de Bootstrap -->
+    <link href="https://stackpath.bootstrapcdn.com/bootstrap/5.0.0-alpha1/css/bootstrap.min.css" rel="stylesheet">
 </head>
 
 <body>
-    <h1>Interaction WebSocket</h1>
-    <h2>secret : <div id="secret"></div></h2>
+    <div class="container mt-5">
+        <h1>Secret generation protocol</h1>
 
-    <h2>Client</h2>
-    <!-- Bouton pour démarrer l'interaction avec le WebSocket -->
-    <button id="startButton" disabled>Démarrer</button>
-    <div id="status"></div>
+        <div class="row my-4">
+            <div class="col-md-6">
+                <h2>Secret :</h2>
+                <div id="secret" class="alert alert-info"></div>
+                <!-- Icône de chargement -->
+                <div id="loading" class="spinner-border text-primary d-none" role="status">
+                    <span class="sr-only">Chargement...</span>
+                </div>
+            </div>
+        </div>
 
-    <h2>Obtenir le tableau</h2>
-    <!-- Bouton pour obtenir les données du tableau depuis le serveur -->
-    <button id="getArrayButton" disabled>Obtenir</button>
-    <div id="arrayResult"></div>
+        <div class="row my-2">
+            <div class="col-md-6">
+                <h2>Client</h2>
+                <button id="startButton" class="btn btn-primary" disabled>Démarrer</button>
+                <div id="status" class="mt-2"></div>
+            </div>
+        </div>
 
-    <h2>Réinitialiser le tableau</h2>
-    <!-- Bouton pour réinitialiser le tableau sur le serveur -->
-    <button id="resetArrayButton" disabled>Réinitialiser</button>
-    <h2>Modifier la Tolérance (ms)</h2>
-    <input value="10" type="number" id="toleranceInput" min="0" placeholder="Tolérance en ms" required>
+        <div class="row my-2">
+            <div class="col-md-6">
+                <h2>Obtenir le tableau</h2>
+                <button id="getArrayButton" class="btn btn-secondary" disabled>Obtenir</button>
+                <div id="arrayResult" class="mt-2"></div>
+            </div>
+        </div>
+
+        <div class="row my-2">
+            <div class="col-md-6">
+                <h2>Réinitialiser le tableau</h2>
+                <button id="resetArrayButton" class="btn btn-danger" disabled>Réinitialiser</button>
+            </div>
+        </div>
+
+        <div class="row my-2">
+            <div class="col-md-6">
+                <h2>Modifier la Tolérance (ms)</h2>
+                <input class="form-control" value="10" type="number" id="toleranceInput" min="0" placeholder="Tolérance en ms" required>
+            </div>
+        </div>
+    </div>
 
 
     <script>
-        const nbDeRequete = 10;
+        const nbDeRequete = 16;
+        const DEMAISALOATOIREMAX = 4000;
         let clientData = []; // Variable globale pour stocker les données
         let serverData = []; // Variable globale pour stocker les données
 
@@ -64,11 +93,13 @@
                 console.log('data.client_id: ', data.client_id);
                 // Affiche le statut lorsque deux clients sont prêts.
                 status.textContent = "Les deux clients sont prêts.";
+                // Affiche le chargement
+                document.getElementById('loading').classList.add('d-block');
                 console.log("GO !");
                 // Commence l'envoi séquentiel des données
                 sendSequentially(ws, data.client_id);
-            
-            //si on resoit la valeur tout les client près
+
+                //si on resoit la valeur tout les client près
             } else if (data.confirmation) {
                 console.log(data.confirmation); // Affiche le message dans la console
                 status.textContent = data.confirmation; // Affiche le message dans l'élément 'status' de l'interface utilisateur
@@ -97,6 +128,13 @@
                 //si le tableau ne fait pas nbDeRequete éléments avec une valeur de comparaison a true
                 if (varDeTestCounttableauCompare != nbDeRequete) {
                     console.log("Le tableau ne fait pas nbDeRequete éléments avec une valeur de comparaison a true");
+                    //affichage du message d'erreur
+                    status.textContent = "Le tableau ne fait pas nbDeRequete éléments avec une valeur de comparaison a true, relancer le protocole";
+                    //reset le tableau
+                    ws.send(JSON.stringify({ reset_tableau: true }));
+                    //reset les variables globales
+                    clientData = [];
+                    serverData = [];
                 } else {
                     console.log("comparaison validée");
                     // Mixe le tableau tableauCompare avec le tableau serverData
@@ -105,10 +143,10 @@
                         let match = tableauCompare.find(clientRecord => clientRecord.serverTimestamp === serverRecord.Timestamp);
                         if (match) {
                             // Si une correspondance est trouvée, fusionne les enregistrements
-                            return {...serverRecord, matchFound: true};
+                            return { ...serverRecord, matchFound: true };
                         } else {
                             // Si aucune correspondance, retourne l'enregistrement serveur tel quel
-                            return {...serverRecord, matchFound: false};
+                            return { ...serverRecord, matchFound: false };
                         }
                     });
                     console.log(tableauFinal);
@@ -137,6 +175,13 @@
                     });
                     console.log("secretFinal: ", secretFinal);
                     secret.textContent = secretFinal;
+                    //reset le tableau
+                    ws.send(JSON.stringify({ reset_tableau: true }));
+                    //reset les variables globales
+                    clientData = [];
+                    serverData = [];
+                    // masque le chargement
+                    document.getElementById('loading').classList.remove('d-block');
                 }
             }
         };
@@ -181,10 +226,13 @@
             serverData = []
             for (let i = 0; i < nbDeRequete; i++) {
                 // Génère un délai aléatoire entre 0 et 2500 ms
-                let delayTime = Math.random() * 2500;
+                let delayTime = Math.random() * DEMAISALOATOIREMAX;
 
                 // Attend le délai spécifié
                 await delay(delayTime);
+
+                //delai supplémentaire pour éviter les collisions
+                await delay(100);
 
                 // Capture le Timestamp actuel
                 let currentTimestamp = new Date().toISOString();
@@ -197,6 +245,7 @@
 
                 // Affiche un message dans la console
                 console.log("Données envoyées : " + clientId + " à " + currentTimestamp);
+                status.textContent = "Données envoyées : " + i + " sur " + nbDeRequete;
             }
             console.log("OK !");
             //envoie une requête pour dire que le client a fini d'envoyer les données

@@ -85,16 +85,14 @@ func handleConnections(w http.ResponseWriter, r *http.Request) {
 
 func sendConfirmationToAll() {
     println("Tous les clients ont terminé d'envoyer des requêtes.")
-    secretSharing.Lock()
-    
 
+    
     for _, client := range secretSharing.Clients {
         err := client.WriteJSON(map[string]string{"confirmation": "Tous les clients ont terminé d'envoyer des requêtes."})
         if err != nil {
             log.Printf("Erreur lors de l'envoi de la confirmation : %v", err)
         }
     }
-    defer secretSharing.Unlock()
 }
 
 // Traite les messages reçus d'un client.
@@ -137,6 +135,8 @@ func handleClientMessage(client *websocket.Conn, msg map[string]interface{}) {
         }
         if allDone && len(secretSharing.ClientDone) >= 2 {
             sendConfirmationToAll()
+            // Réinitialise la map.
+            secretSharing.ClientDone = make(map[int]bool)
         }
         secretSharing.Unlock()
     } else if _, ok := msg["client_pret"]; ok {
