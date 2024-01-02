@@ -2,13 +2,15 @@
  
 Ce projet implémente un protocole de partage de secrets utilisant des WebSockets pour la communication en temps réel entre le client et le serveur.
 
-![sheam](TP2.png)
+![shema](TP2.png)
 
 ## Usage Général
 
 Démarrage: Les clients se connectent au serveur via WebSocket.
 Échanges de Données: Les clients envoient des données au serveur à des intervalles aléatoires.
 Génération de Secret: Une fois toutes les données collectées, le serveur et les clients utilisent ces données pour générer un secret partagé.
+
+![ilustration](TP2_ilustration.png)
 
 ## Enjeux de Timing
 
