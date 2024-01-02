@@ -2,6 +2,7 @@
  
 Ce projet implémente un protocole de partage de secrets utilisant des WebSockets pour la communication en temps réel entre le client et le serveur.
 
+![sheam](TP2.png)
 
 ## Usage Général
 
